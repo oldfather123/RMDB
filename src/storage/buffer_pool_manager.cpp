@@ -175,11 +175,11 @@ bool BufferPoolManager::delete_page(PageId page_id) {
 void BufferPoolManager::flush_all_pages(int fd) {
     std::scoped_lock lock{latch_};
     for (auto &entry : page_table_) {
-        if (entry.first.fd != fd) {
+        if (fd != -1 && entry.first.fd != fd) {
             continue;
         }
         Page *page = &pages_[entry.second];
-        disk_manager_->write_page(fd, entry.first.page_no, page->data_, PAGE_SIZE);
+        disk_manager_->write_page(entry.first.fd, entry.first.page_no, page->data_, PAGE_SIZE);
         page->is_dirty_ = false;
     }
 }

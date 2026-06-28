@@ -41,6 +41,11 @@ class DeleteExecutor : public AbstractExecutor {
         for (const auto &rid : rids_) {
             auto rec = fh_->get_record(rid, context_);
             if (context_->txn_ != nullptr) {
+                DeleteLogRecord log(context_->txn_->get_transaction_id(), *rec, const_cast<Rid &>(rid), tab_name_);
+                log.prev_lsn_ = context_->txn_->get_prev_lsn();
+                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log);
+                context_->txn_->set_prev_lsn(lsn);
+                context_->log_mgr_->flush_log_to_disk();
                 context_->txn_->append_write_record(new WriteRecord(WType::DELETE_TUPLE, tab_name_, rid, *rec));
             }
             for (auto &index : tab_.indexes) {

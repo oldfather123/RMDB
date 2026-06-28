@@ -44,6 +44,14 @@ Transaction * TransactionManager::begin(Transaction* txn, LogManager* log_manage
 
     std::unique_lock<std::mutex> lock(latch_);
     TransactionManager::txn_map[txn->get_transaction_id()] = txn;
+    lock.unlock();
+    if (log_manager != nullptr) {
+        BeginLogRecord log(txn->get_transaction_id());
+        log.prev_lsn_ = txn->get_prev_lsn();
+        lsn_t lsn = log_manager->add_log_to_buffer(&log);
+        txn->set_prev_lsn(lsn);
+        log_manager->flush_log_to_disk();
+    }
     return txn;
 }
 
@@ -57,6 +65,14 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         return;
     }
 
+    if (log_manager != nullptr) {
+        CommitLogRecord log(txn->get_transaction_id());
+        log.prev_lsn_ = txn->get_prev_lsn();
+        lsn_t lsn = log_manager->add_log_to_buffer(&log);
+        txn->set_prev_lsn(lsn);
+        log_manager->flush_log_to_disk();
+    }
+
     std::vector<LockDataId> locks(txn->get_lock_set()->begin(), txn->get_lock_set()->end());
     for (const auto &lock_data_id : locks) {
         lock_manager_->unlock(txn, lock_data_id);
@@ -66,9 +82,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         delete write_record;
     }
     txn->get_write_set()->clear();
-    if (log_manager != nullptr) {
-        log_manager->flush_log_to_disk();
-    }
     txn->set_state(TransactionState::COMMITTED);
 
 }
@@ -134,6 +147,10 @@ void TransactionManager::abort(Transaction * txn, LogManager *log_manager) {
     }
     txn->get_lock_set()->clear();
     if (log_manager != nullptr) {
+        AbortLogRecord log(txn->get_transaction_id());
+        log.prev_lsn_ = txn->get_prev_lsn();
+        lsn_t lsn = log_manager->add_log_to_buffer(&log);
+        txn->set_prev_lsn(lsn);
         log_manager->flush_log_to_disk();
     }
     txn->set_state(TransactionState::ABORTED);

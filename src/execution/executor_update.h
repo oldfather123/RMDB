@@ -76,22 +76,23 @@ class UpdateExecutor : public AbstractExecutor {
                 delete[] key;
             }
 
-            for (auto &set_clause : set_clauses_) {
-                auto col = tab_.get_col(set_clause.lhs.col_name);
-                memcpy(rec->data + col->offset, set_clause.rhs.raw->data, col->len);
-            }
-
-            fh_->update_record(rid, rec->data, context_);
             if (context_->txn_ != nullptr) {
+                UpdateLogRecord log(context_->txn_->get_transaction_id(), old_rec, new_rec, const_cast<Rid &>(rid), tab_name_);
+                log.prev_lsn_ = context_->txn_->get_prev_lsn();
+                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log);
+                context_->txn_->set_prev_lsn(lsn);
+                context_->log_mgr_->flush_log_to_disk();
                 context_->txn_->append_write_record(new WriteRecord(WType::UPDATE_TUPLE, tab_name_, rid, old_rec));
             }
+
+            fh_->update_record(rid, new_rec.data, context_);
 
             for (auto &index : tab_.indexes) {
                 auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
                 char *key = new char[index.col_tot_len];
                 int offset = 0;
                 for (size_t i = 0; i < index.col_num; ++i) {
-                    memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
+                    memcpy(key + offset, new_rec.data + index.cols[i].offset, index.cols[i].len);
                     offset += index.cols[i].len;
                 }
                 ih->insert_entry(key, rid, context_->txn_);
