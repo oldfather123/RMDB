@@ -1,0 +1,4 @@
+build/
+rmdb_client/build/
+*_db/
+BufferPoolManagerTest_db/
