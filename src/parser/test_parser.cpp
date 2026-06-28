@@ -30,6 +30,7 @@ int main() {
         "select * from tb where x <> 2 and y >= 3. and z <= '123' and b < tb.a;",
         "select x.a, y.b from x, y where x.a = y.b and c = d;",
         "select x.a, y.b from x join y where x.a = y.b and c = d;",
+        "select a, b from tb order by a desc, b asc limit 2;",
         "exit;",
         "help;",
         "",

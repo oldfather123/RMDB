@@ -21,7 +21,7 @@ using namespace ast;
 %define parse.error verbose
 
 // keywords
-%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
+%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY LIMIT
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
 %token AS COUNT MAX MIN SUM
 // non-keywords
@@ -52,8 +52,11 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
 %type <sv_conds> whereClause optWhereClause
-%type <sv_orderby>  order_clause opt_order_clause
+%type <sv_orderby> opt_order_clause
+%type <sv_orderby_items> order_clause
+%type <sv_orderby_item> order_item
 %type <sv_orderby_dir> opt_asc_desc
+%type <sv_int> opt_limit
 
 %%
 start:
@@ -152,9 +155,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause
+    |   SELECT selector FROM tableList optWhereClause opt_order_clause opt_limit
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
     }
     ;
 
@@ -428,15 +431,26 @@ tableList:
 opt_order_clause:
     ORDER BY order_clause      
     { 
-        $$ = $3; 
+        $$ = std::make_shared<OrderBy>($3);
     }
     |   /* epsilon */ { /* ignore*/ }
     ;
 
 order_clause:
-      col  opt_asc_desc 
-    { 
-        $$ = std::make_shared<OrderBy>($1, $2);
+      order_item
+    {
+        $$ = std::vector<std::shared_ptr<OrderByItem>>{$1};
+    }
+    | order_clause ',' order_item
+    {
+        $$.push_back($3);
+    }
+    ;
+
+order_item:
+      col opt_asc_desc
+    {
+        $$ = std::make_shared<OrderByItem>($1, $2);
     }
     ;   
 
@@ -445,6 +459,17 @@ opt_asc_desc:
     |  DESC      { $$ = OrderBy_DESC;    }
     |       { $$ = OrderBy_DEFAULT; }
     ;    
+
+opt_limit:
+        LIMIT VALUE_INT
+    {
+        $$ = std::stoi($2);
+    }
+    |   /* epsilon */
+    {
+        $$ = -1;
+    }
+    ;
 
 tbName: IDENTIFIER;
 

@@ -132,6 +132,13 @@ private:
                 print_node(x->col, offset);
             }
             print_val(x->alias, offset);
+        } else if (auto x = std::dynamic_pointer_cast<OrderByItem>(node)) {
+            std::cout << "ORDER_BY_ITEM\n";
+            print_node(x->col, offset);
+            print_val(x->orderby_dir == OrderBy_DESC ? "DESC" : "ASC", offset);
+        } else if (auto x = std::dynamic_pointer_cast<OrderBy>(node)) {
+            std::cout << "ORDER_BY\n";
+            print_node_list(x->items, offset);
         } else if (auto x = std::dynamic_pointer_cast<TypeLen>(node)) {
             std::cout << "TYPE_LEN\n";
             print_val(type2str(x->type), offset);
@@ -173,6 +180,10 @@ private:
             print_node_list(x->aggs, offset);
             print_val_list(x->tabs, offset);
             print_node_list(x->conds, offset);
+            if (x->order) {
+                print_node(x->order, offset);
+            }
+            print_val(x->limit, offset);
         } else if (auto x = std::dynamic_pointer_cast<TxnBegin>(node)) {
             std::cout << "BEGIN\n";
         } else if (auto x = std::dynamic_pointer_cast<TxnCommit>(node)) {

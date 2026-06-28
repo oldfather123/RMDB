@@ -187,12 +187,20 @@ struct BinaryExpr : public TreeNode {
             lhs(std::move(lhs_)), op(op_), rhs(std::move(rhs_)) {}
 };
 
+struct OrderByItem : public TreeNode {
+    std::shared_ptr<Col> col;
+    OrderByDir orderby_dir;
+
+    OrderByItem(std::shared_ptr<Col> col_, OrderByDir orderby_dir_) :
+            col(std::move(col_)), orderby_dir(orderby_dir_) {}
+};
+
 struct OrderBy : public TreeNode
 {
-    std::shared_ptr<Col> cols;
-    OrderByDir orderby_dir;
-    OrderBy( std::shared_ptr<Col> cols_, OrderByDir orderby_dir_) :
-       cols(std::move(cols_)), orderby_dir(std::move(orderby_dir_)) {}
+    std::vector<std::shared_ptr<OrderByItem>> items;
+
+    OrderBy(std::vector<std::shared_ptr<OrderByItem>> items_) :
+            items(std::move(items_)) {}
 };
 
 struct InsertStmt : public TreeNode {
@@ -243,14 +251,16 @@ struct SelectStmt : public TreeNode {
     
     bool has_sort;
     std::shared_ptr<OrderBy> order;
+    int limit;
 
 
     SelectStmt(std::shared_ptr<Selector> selector_,
                std::vector<std::string> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::shared_ptr<OrderBy> order_) :
+               std::shared_ptr<OrderBy> order_,
+               int limit_) :
             tabs(std::move(tabs_)), conds(std::move(conds_)),
-            order(std::move(order_)) {
+            order(std::move(order_)), limit(limit_) {
                 if (selector_) {
                     cols = std::move(selector_->cols);
                     aggs = std::move(selector_->aggs);
@@ -262,6 +272,7 @@ struct SelectStmt : public TreeNode {
 // Semantic value
 struct SemValue {
     float sv_float;
+    int sv_int;
     std::string sv_str;
     OrderByDir sv_orderby_dir;
     std::vector<std::string> sv_strs;
@@ -294,6 +305,8 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    std::shared_ptr<OrderByItem> sv_orderby_item;
+    std::vector<std::shared_ptr<OrderByItem>> sv_orderby_items;
 };
 
 extern std::shared_ptr<ast::TreeNode> parse_tree;

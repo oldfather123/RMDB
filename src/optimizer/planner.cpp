@@ -288,7 +288,7 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query)
 std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan)
 {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    if(!x->has_sort) {
+    if(!x->has_sort && x->limit < 0) {
         return plan;
     }
     std::vector<std::string> tables = query->tables;
@@ -298,13 +298,40 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
         const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
         all_cols.insert(all_cols.end(), sel_tab_cols.begin(), sel_tab_cols.end());
     }
-    TabCol sel_col;
-    for (auto &col : all_cols) {
-        if(col.name.compare(x->order->cols->col_name) == 0 )
-        sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+    std::vector<SortKey> sort_keys;
+    if (x->has_sort) {
+        for (auto &item : x->order->items) {
+            TabCol target = {.tab_name = item->col->tab_name, .col_name = item->col->col_name};
+            if (target.tab_name.empty()) {
+                std::string tab_name;
+                for (auto &col : all_cols) {
+                    if (col.name == target.col_name) {
+                        if (!tab_name.empty()) {
+                            throw AmbiguousColumnError(target.col_name);
+                        }
+                        tab_name = col.tab_name;
+                    }
+                }
+                if (tab_name.empty()) {
+                    throw ColumnNotFoundError(target.col_name);
+                }
+                target.tab_name = tab_name;
+            } else {
+                bool found = false;
+                for (auto &col : all_cols) {
+                    if (col.tab_name == target.tab_name && col.name == target.col_name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw ColumnNotFoundError(target.tab_name + "." + target.col_name);
+                }
+            }
+            sort_keys.push_back({.col = target, .is_desc = item->orderby_dir == ast::OrderBy_DESC});
+        }
     }
-    return std::make_shared<SortPlan>(T_Sort, std::move(plan), sel_col, 
-                                    x->order->orderby_dir == ast::OrderBy_DESC);
+    return std::make_shared<SortPlan>(T_Sort, std::move(plan), std::move(sort_keys), x->limit);
 }
 
 
