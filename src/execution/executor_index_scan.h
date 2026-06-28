@@ -141,6 +141,7 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
+        context_->lock_mgr_->lock_shared_on_table(context_->txn_, fh_->GetFd());
         auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_meta_.cols)).get();
         std::vector<char> lower_key(index_meta_.col_tot_len);
         std::vector<char> upper_key(index_meta_.col_tot_len);

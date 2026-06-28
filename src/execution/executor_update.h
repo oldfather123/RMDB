@@ -38,6 +38,7 @@ class UpdateExecutor : public AbstractExecutor {
         context_ = context;
     }
     std::unique_ptr<RmRecord> Next() override {
+        context_->lock_mgr_->lock_exclusive_on_table(context_->txn_, fh_->GetFd());
         for (const auto &rid : rids_) {
             auto rec = fh_->get_record(rid, context_);
             RmRecord old_rec(*rec);

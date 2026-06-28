@@ -202,6 +202,7 @@ std::pair<IxNodeHandle *, bool> IxIndexHandle::find_leaf_page(const char *key, O
  * @return bool 返回目标键值对是否存在
  */
 bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transaction *transaction) {
+    std::lock_guard<std::mutex> lock(index_latch_);
     result->clear();
     auto [leaf, root_is_latched] = find_leaf_page(key, Operation::FIND, transaction);
     if (leaf == nullptr) {
@@ -312,6 +313,7 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
  * @return page_id_t 插入到的叶结点的page_no
  */
 page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction *transaction) {
+    std::lock_guard<std::mutex> lock(index_latch_);
     auto [leaf, root_is_latched] = find_leaf_page(key, Operation::INSERT, transaction);
     if (leaf == nullptr) {
         return IX_NO_PAGE;
@@ -340,6 +342,7 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
  * @param transaction 事务指针
  */
 bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
+    std::lock_guard<std::mutex> lock(index_latch_);
     auto [leaf, root_is_latched] = find_leaf_page(key, Operation::DELETE, transaction);
     if (leaf == nullptr) {
         return false;
