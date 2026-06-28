@@ -9,12 +9,25 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "transaction_manager.h"
+#include "index/ix.h"
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
 
 #include <vector>
 
 std::unordered_map<txn_id_t, Transaction *> TransactionManager::txn_map = {};
+
+namespace {
+std::unique_ptr<char[]> make_index_key(const RmRecord &record, const IndexMeta &index) {
+    auto key = std::make_unique<char[]>(index.col_tot_len);
+    int offset = 0;
+    for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
+        memcpy(key.get() + offset, record.data + index.cols[i].offset, index.cols[i].len);
+        offset += index.cols[i].len;
+    }
+    return key;
+}
+}  // namespace
 
 /**
  * @description: 事务的开始方法
@@ -49,6 +62,9 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         lock_manager_->unlock(txn, lock_data_id);
     }
     txn->get_lock_set()->clear();
+    for (auto *write_record : *txn->get_write_set()) {
+        delete write_record;
+    }
     txn->get_write_set()->clear();
     if (log_manager != nullptr) {
         log_manager->flush_log_to_disk();
@@ -67,7 +83,51 @@ void TransactionManager::abort(Transaction * txn, LogManager *log_manager) {
         return;
     }
 
-    txn->get_write_set()->clear();
+    auto write_set = txn->get_write_set();
+    while (!write_set->empty()) {
+        WriteRecord *write_record = write_set->back();
+        write_set->pop_back();
+
+        const std::string &tab_name = write_record->GetTableName();
+        TabMeta &tab = sm_manager_->db_.get_table(tab_name);
+        RmFileHandle *fh = sm_manager_->fhs_.at(tab_name).get();
+        Rid rid = write_record->GetRid();
+
+        if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
+            auto rec = fh->get_record(rid, nullptr);
+            for (auto &index : tab.indexes) {
+                auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols)).get();
+                auto key = make_index_key(*rec, index);
+                ih->delete_entry(key.get(), txn);
+            }
+            fh->delete_record(rid, nullptr);
+        } else if (write_record->GetWriteType() == WType::DELETE_TUPLE) {
+            RmRecord &old_rec = write_record->GetRecord();
+            fh->insert_record(rid, old_rec.data);
+            for (auto &index : tab.indexes) {
+                auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols)).get();
+                auto key = make_index_key(old_rec, index);
+                ih->insert_entry(key.get(), rid, txn);
+            }
+        } else if (write_record->GetWriteType() == WType::UPDATE_TUPLE) {
+            auto new_rec = fh->get_record(rid, nullptr);
+            for (auto &index : tab.indexes) {
+                auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols)).get();
+                auto key = make_index_key(*new_rec, index);
+                ih->delete_entry(key.get(), txn);
+            }
+
+            RmRecord &old_rec = write_record->GetRecord();
+            fh->update_record(rid, old_rec.data, nullptr);
+            for (auto &index : tab.indexes) {
+                auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols)).get();
+                auto key = make_index_key(old_rec, index);
+                ih->insert_entry(key.get(), rid, txn);
+            }
+        }
+        delete write_record;
+    }
+
     std::vector<LockDataId> locks(txn->get_lock_set()->begin(), txn->get_lock_set()->end());
     for (const auto &lock_data_id : locks) {
         lock_manager_->unlock(txn, lock_data_id);

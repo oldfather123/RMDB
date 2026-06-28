@@ -40,6 +40,7 @@ class UpdateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         for (const auto &rid : rids_) {
             auto rec = fh_->get_record(rid, context_);
+            RmRecord old_rec(*rec);
             RmRecord new_rec(rec->size, rec->data);
             for (auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
@@ -80,6 +81,9 @@ class UpdateExecutor : public AbstractExecutor {
             }
 
             fh_->update_record(rid, rec->data, context_);
+            if (context_->txn_ != nullptr) {
+                context_->txn_->append_write_record(new WriteRecord(WType::UPDATE_TUPLE, tab_name_, rid, old_rec));
+            }
 
             for (auto &index : tab_.indexes) {
                 auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
