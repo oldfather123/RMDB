@@ -92,6 +92,15 @@ struct Value {
 
 enum CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 
+enum AggType { AGG_COUNT, AGG_MAX, AGG_MIN, AGG_SUM };
+
+struct AggregateCall {
+    AggType type;
+    TabCol col;
+    bool is_star = false;
+    std::string alias;
+};
+
 struct Condition {
     TabCol lhs_col;   // left-hand side column
     CompOp op;        // comparison operator

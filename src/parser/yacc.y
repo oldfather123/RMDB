@@ -23,6 +23,7 @@ using namespace ast;
 // keywords
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
+%token AS COUNT MAX MIN SUM
 // non-keywords
 %token LEQ NEQ GEQ T_EOF
 
@@ -42,7 +43,11 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_str> tbName colName
 %type <sv_strs> tableList colNameList
 %type <sv_col> col
-%type <sv_cols> colList selector
+%type <sv_cols> colList
+%type <sv_selector> selector
+%type <sv_agg> aggExpr
+%type <sv_aggs> aggList
+%type <sv_agg_type> aggFunc
 %type <sv_set_clause> setClause
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
@@ -338,9 +343,71 @@ setClause:
 selector:
         '*'
     {
-        $$ = {};
+        $$ = std::make_shared<Selector>();
     }
     |   colList
+    {
+        $$ = std::make_shared<Selector>();
+        $$->cols = $1;
+    }
+    |   aggList
+    {
+        $$ = std::make_shared<Selector>();
+        $$->aggs = $1;
+    }
+    ;
+
+aggList:
+        aggExpr
+    {
+        $$ = std::vector<std::shared_ptr<AggExpr>>{$1};
+    }
+    |   aggList ',' aggExpr
+    {
+        $$.push_back($3);
+    }
+    ;
+
+aggExpr:
+        aggFunc '(' col ')' AS colName
+    {
+        $$ = std::make_shared<AggExpr>($1, $3, false, $6);
+    }
+    |   COUNT '(' col ')' AS colName
+    {
+        $$ = std::make_shared<AggExpr>(AGG_FUNC_COUNT, $3, false, $6);
+    }
+    |   COUNT '(' '*' ')' AS colName
+    {
+        $$ = std::make_shared<AggExpr>(AGG_FUNC_COUNT, std::shared_ptr<Col>(), true, $6);
+    }
+    |   aggFunc '(' col ')'
+    {
+        $$ = std::make_shared<AggExpr>($1, $3, false, $1 == AGG_FUNC_MAX ? "MAX" : ($1 == AGG_FUNC_MIN ? "MIN" : "SUM"));
+    }
+    |   COUNT '(' col ')'
+    {
+        $$ = std::make_shared<AggExpr>(AGG_FUNC_COUNT, $3, false, "COUNT");
+    }
+    |   COUNT '(' '*' ')'
+    {
+        $$ = std::make_shared<AggExpr>(AGG_FUNC_COUNT, std::shared_ptr<Col>(), true, "COUNT");
+    }
+    ;
+
+aggFunc:
+        MAX
+    {
+        $$ = AGG_FUNC_MAX;
+    }
+    |   MIN
+    {
+        $$ = AGG_FUNC_MIN;
+    }
+    |   SUM
+    {
+        $$ = AGG_FUNC_SUM;
+    }
     ;
 
 tableList:

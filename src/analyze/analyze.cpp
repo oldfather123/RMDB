@@ -40,15 +40,46 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         get_all_cols(query->tables, all_cols);
         if (query->cols.empty()) {
             // select all columns
-            for (auto &col : all_cols) {
-                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
-                query->cols.push_back(sel_col);
+            if (x->aggs.empty()) {
+                for (auto &col : all_cols) {
+                    TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                    query->cols.push_back(sel_col);
+                }
             }
         } else {
             // infer table name from column name
             for (auto &sel_col : query->cols) {
                 sel_col = check_column(all_cols, sel_col);  // 列元数据校验
             }
+        }
+        for (auto &sv_agg : x->aggs) {
+            AggregateCall agg;
+            switch (sv_agg->type) {
+                case ast::AGG_FUNC_COUNT:
+                    agg.type = AGG_COUNT;
+                    break;
+                case ast::AGG_FUNC_MAX:
+                    agg.type = AGG_MAX;
+                    break;
+                case ast::AGG_FUNC_MIN:
+                    agg.type = AGG_MIN;
+                    break;
+                case ast::AGG_FUNC_SUM:
+                    agg.type = AGG_SUM;
+                    break;
+            }
+            agg.is_star = sv_agg->is_star;
+            agg.alias = sv_agg->alias;
+            if (!agg.is_star) {
+                agg.col = {.tab_name = sv_agg->col->tab_name, .col_name = sv_agg->col->col_name};
+                agg.col = check_column(all_cols, agg.col);
+                auto &tab = sm_manager_->db_.get_table(agg.col.tab_name);
+                auto col = tab.get_col(agg.col.col_name);
+                if (agg.type == AGG_SUM && col->type != TYPE_INT && col->type != TYPE_FLOAT) {
+                    throw IncompatibleTypeError("INT/FLOAT", coltype2str(col->type));
+                }
+            }
+            query->aggregates.push_back(std::move(agg));
         }
         //处理where条件
         get_clause(x->conds, query->conds);

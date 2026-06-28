@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <string>
 #include <vector>
+#include "common/common.h"
 #include "parser/ast.h"
 
 #include "parser/parser.h"
@@ -41,7 +42,8 @@ typedef enum PlanTag{
     T_IndexScan,
     T_NestLoop,
     T_Sort,
-    T_Projection
+    T_Projection,
+    T_Aggregate
 } PlanTag;
 
 // 查询执行计划
@@ -114,6 +116,20 @@ class ProjectionPlan : public Plan
         std::shared_ptr<Plan> subplan_;
         std::vector<TabCol> sel_cols_;
         
+};
+
+class AggregatePlan : public Plan
+{
+    public:
+        AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<AggregateCall> aggs)
+        {
+            Plan::tag = tag;
+            subplan_ = std::move(subplan);
+            aggs_ = std::move(aggs);
+        }
+        ~AggregatePlan(){}
+        std::shared_ptr<Plan> subplan_;
+        std::vector<AggregateCall> aggs_;
 };
 
 class SortPlan : public Plan
