@@ -21,7 +21,9 @@ struct PageId {
 
     friend bool operator==(const PageId &x, const PageId &y) { return x.fd == y.fd && x.page_no == y.page_no; }
     bool operator<(const PageId& x) const {
-        if(fd < x.fd) return true;
+        if (fd != x.fd) {
+            return fd < x.fd;
+        }
         return page_no < x.page_no;
     }
 

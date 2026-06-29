@@ -3,3 +3,4 @@ rmdb_client/build/
 *_db/
 BufferPoolManagerTest_db/
 .DS_Store
+tests/experiment2/results/

@@ -132,7 +132,7 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
     Page *page = &pages_[frame_id];
     update_page(page, new_page_id, frame_id);
     page->pin_count_ = 1;
-    page->is_dirty_ = true;
+    page->is_dirty_ = false;
     *page_id = new_page_id;
     return page;
 }
